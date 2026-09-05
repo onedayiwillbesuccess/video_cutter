@@ -6,9 +6,10 @@ A self-hosted, 100% open-source tool that automatically repurposes YouTube video
 
 ```
 YouTube URL
-  → yt-dlp downloads audio (fast) + full video (background)
+  → yt-dlp downloads audio (fast) + kicks off full-video download in background
   → faster-whisper transcribes audio with sentence + word-level timestamps
   → Ollama (Llama 3.2) analyzes transcript and picks 5 viral segments
+  → pipeline waits for the background video download to finish (<-- used to be missing!)
   → MoviePy + FFmpeg cut → 9:16 crop that TRACKS THE SPEAKER'S FACE (MediaPipe)
   → Karaoke-style captions burned in: active word highlights yellow as spoken
   → Clips shown on the web UI with in-page preview + Download buttons
@@ -115,6 +116,6 @@ Then open **http://localhost:8501**, paste a YouTube URL, and hit **Snip It!**
 - Clips are rendered at 1080×1920 (9:16), H.264 + AAC.
 - Captions are karaoke-style: white text with the active word highlighted in yellow, in the bottom safe zone (clear of Reels/TikTok buttons), bold 56px with a black outline.
 - Face tracking gracefully falls back to center-crop if MediaPipe isn't installed or no faces are found.
-- The audio download enables instant transcription while the full video downloads; editing waits for the full video to finish.
+- The audio download enables instant transcription while the full video downloads in a background thread (`main.py`). The editing step waits (joins) for the video thread before cutting, so `full_video.mp4` always exists — fixing the earlier bug where the editor looked for a file that was never fetched.
 - Output files land in `outputs/<job_id>/`, including the full transcript JSON (with word timestamps) and per-clip `.ass`/`.srt` files.
 - **Not built yet (future work):** automatic emoji/keyword callouts and B-roll insertion at salient keywords ("Money" → 💰). Recommended roadmap: enrich `tracker.py`/`captions.py` stays, add a keyword→emoji map applied inside the ASS renderer, then an FFmpeg `overlay`/concat pass for B-roll stills.

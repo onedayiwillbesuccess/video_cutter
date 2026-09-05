@@ -33,6 +33,13 @@ OUTPUTS_DIR = os.path.join(BASE_DIR, "..", "outputs")
 jobs: dict[str, JobStatus] = {}
 
 
+def _download_video_safe(url: str, job_dir: str, error_store: dict):
+    try:
+        download_video(url, job_dir)
+    except Exception as e:
+        error_store["msg"] = str(e)
+
+
 def _run_pipeline(job_id: str, url: str):
     job_dir = os.path.join(OUTPUTS_DIR, job_id)
 
@@ -43,6 +50,14 @@ def _run_pipeline(job_id: str, url: str):
         job.step = "downloading_audio"
         job.message = "Downloading audio..."
         audio_path, title = download_audio(url, job_dir)
+
+        video_error = {}
+        video_thread = threading.Thread(
+            target=_download_video_safe,
+            args=(url, job_dir, video_error),
+            daemon=True,
+        )
+        video_thread.start()
 
         job.step = "transcribing"
         job.message = "Transcribing audio with Whisper..."
@@ -56,6 +71,21 @@ def _run_pipeline(job_id: str, url: str):
         job.message = "Asking Ollama to select viral clips..."
         clips = select_clips(transcript)
 
+        job.step = "downloading_video"
+        job.message = "Waiting for full video download..."
+        video_thread.join()
+        if video_error:
+            raise RuntimeError(
+                f"Could not get video track for editing: {video_error['msg']}"
+            )
+
+        video_path = os.path.join(job_dir, "full_video.mp4")
+        if not os.path.exists(video_path):
+            raise RuntimeError(
+                "Full video file was not produced. This source may be audio-only "
+                "(e.g. a podcast) or the download was interrupted."
+            )
+
         job.step = "editing"
         job.message = "Cutting and processing clips..."
         clip_paths = []
@@ -63,7 +93,7 @@ def _run_pipeline(job_id: str, url: str):
             job.message = f"Processing clip {i + 1}/{len(clips)}: {clip['title']}"
             output_path = os.path.join(job_dir, f"clip_{i + 1}.mp4")
             cut_clip(
-                video_path=os.path.join(job_dir, "full_video.mp4"),
+                video_path=video_path,
                 start_time=clip["start_time"],
                 end_time=clip["end_time"],
                 output_path=output_path,
@@ -154,3 +184,6 @@ def download_file(job_id: str, filename: str):
 @app.get("/api/health")
 def health():
     return {"status": "ok", "service": "The Clip Snipper"}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

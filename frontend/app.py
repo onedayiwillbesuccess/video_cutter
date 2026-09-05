@@ -58,9 +58,10 @@ if st.session_state.job_id:
 
     steps = {
         "starting": ("Starting...", 0.05),
-        "downloading_audio": ("Downloading audio...", 0.15),
-        "transcribing": ("Transcribing with Whisper...", 0.35),
-        "selecting_clips": ("AI selecting viral clips...", 0.55),
+        "downloading_audio": ("Downloading audio...", 0.10),
+        "transcribing": ("Transcribing with Whisper...", 0.30),
+        "selecting_clips": ("AI selecting viral clips...", 0.50),
+        "downloading_video": ("Downloading full video...", 0.65),
         "editing": ("Cutting and processing clips...", 0.75),
         "done": ("Complete!", 1.0),
         "error": ("Error occurred", 0),
