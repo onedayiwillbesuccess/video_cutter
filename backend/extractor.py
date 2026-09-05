@@ -38,7 +38,7 @@ def download_video(url: str, output_dir: str) -> str:
     video_path = os.path.join(output_dir, "full_video.%(ext)s")
 
     ydl_opts = {
-        "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best",
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
         "outtmpl": video_path,
         "merge_output_format": "mp4",
         "quiet": True,

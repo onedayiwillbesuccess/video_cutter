@@ -4,11 +4,40 @@ MAX_CHUNK_WORDS = 5
 PLAY_RES_X = 1080
 PLAY_RES_Y = 1920
 
-HIGHLIGHT_COLOR = "&H0000FFFF"  # BGR: bright yellow
-BASE_COLOR = "&H00FFFFFF"       # white
-OUTLINE_COLOR = "&H00000000"    # black
+STYLE_CONFIG = {
+    "Fontname": "Arial Black",
+    "Fontsize": 70,
+    "PrimaryColour": "&H00FFFFFF",
+    "SecondaryColour": "&H0000FFFF",
+    "OutlineColour": "&H00000000",
+    "BackColour": "&H96000000",
+    "Bold": -1,
+    "Italic": 0,
+    "Underline": 0,
+    "StrikeOut": 0,
+    "ScaleX": 100,
+    "ScaleY": 100,
+    "Spacing": 2,
+    "Angle": 0,
+    "BorderStyle": 1,
+    "Outline": 3,
+    "Shadow": 0,
+    "Alignment": 2,
+    "MarginL": 80,
+    "MarginR": 250,
+    "MarginV": 250,
+    "Encoding": 1,
+}
 
-DEFAULT_FONT = os.environ.get("CAPTION_FONT", "Arial")
+DEFAULT_FONT = os.environ.get("CAPTION_FONT", "").strip()
+if DEFAULT_FONT:
+    STYLE_CONFIG["Fontname"] = DEFAULT_FONT
+
+STYLE_FIELDS = (
+    "Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
+    "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, "
+    "Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding"
+)
 
 
 def _ass_time(seconds: float) -> str:
@@ -24,6 +53,33 @@ def _ass_time(seconds: float) -> str:
 
 
 def _header() -> str:
+    style_values = [
+        "Default",
+        STYLE_CONFIG["Fontname"],
+        STYLE_CONFIG["Fontsize"],
+        STYLE_CONFIG["PrimaryColour"],
+        STYLE_CONFIG["SecondaryColour"],
+        STYLE_CONFIG["OutlineColour"],
+        STYLE_CONFIG["BackColour"],
+        STYLE_CONFIG["Bold"],
+        STYLE_CONFIG["Italic"],
+        STYLE_CONFIG["Underline"],
+        STYLE_CONFIG["StrikeOut"],
+        STYLE_CONFIG["ScaleX"],
+        STYLE_CONFIG["ScaleY"],
+        STYLE_CONFIG["Spacing"],
+        STYLE_CONFIG["Angle"],
+        STYLE_CONFIG["BorderStyle"],
+        STYLE_CONFIG["Outline"],
+        STYLE_CONFIG["Shadow"],
+        STYLE_CONFIG["Alignment"],
+        STYLE_CONFIG["MarginL"],
+        STYLE_CONFIG["MarginR"],
+        STYLE_CONFIG["MarginV"],
+        STYLE_CONFIG["Encoding"],
+    ]
+    style_line = ",".join(str(v) for v in style_values)
+
     return f"""[Script Info]
 ScriptType: v4.00+
 Collisions: Normal
@@ -34,8 +90,8 @@ ScaledBorderAndShadow: yes
 YCbCr Matrix: TV.709
 
 [V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{DEFAULT_FONT},56,&H00FFFFFF,&H0000FFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,3,0,2,80,250,120,1
+Format: {STYLE_FIELDS}
+Style: {style_line}
 """
 
 
@@ -54,43 +110,32 @@ def _chunk_words(words: list[dict]) -> list[list[dict]]:
 
 def _word_escaped(text: str) -> str:
     return (
-        text.replace("{", "(")
+        text.replace("\\", "\\\\")
+        .replace("{", "(")
         .replace("}", ")")
         .replace("\n", " ")
         .strip()
+        .upper()
     )
 
 
 def _build_chunk_lines(chunk: list[dict]) -> list[str]:
     chunk_start = chunk[0]["start"]
     chunk_end = chunk[-1]["end"]
-    base_text = " ".join(_word_escaped(w["word"]) for w in chunk)
 
-    lines = []
+    karaoke_parts = []
+    cumulative = 0
+    for w in chunk:
+        dur_cs = max(int(round((w["end"] - w["start"]) * 100)), 0)
+        karaoke_parts.append(f"{{\\k{dur_cs}}}{_word_escaped(w['word'])}")
+        cumulative += dur_cs
 
-    dialogue = (
+    line_text = " ".join(karaoke_parts)
+
+    return [
         f"Dialogue: 0,{_ass_time(chunk_start)},{_ass_time(chunk_end)},"
-        f"Default,,0,0,0,,{base_text}"
-    )
-    lines.append(dialogue)
-
-    for i, w in enumerate(chunk):
-        w_start = w["start"]
-        w_end = w["end"]
-        parts = []
-        for j, other in enumerate(chunk):
-            word_text = _word_escaped(other["word"])
-            if j == i:
-                parts.append(f"{{\\c{HIGHLIGHT_COLOR}}}{word_text}{{\\c{BASE_COLOR}}}")
-            else:
-                parts.append(f"{{\\alpha&HFF&}}{word_text}{{\\alpha&H00&}}")
-        highlight_line = " ".join(parts)
-        lines.append(
-            f"Dialogue: 0,{_ass_time(w_start)},{_ass_time(w_end)},"
-            f"Default,,0,0,0,,{highlight_line}"
-        )
-
-    return lines
+        f"Default,,0,0,0,,{line_text}"
+    ]
 
 
 def _fallback_words_from_segments(segments: list[dict]) -> list[dict]:
