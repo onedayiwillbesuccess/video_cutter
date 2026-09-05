@@ -1,0 +1,12 @@
+outputs/
+temp/
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+venv/
+.venv/
+*.mp4
+*.mp3
+*.wav
+*.srt
