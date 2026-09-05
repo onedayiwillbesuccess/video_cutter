@@ -79,7 +79,7 @@ def _burn_captions(temp_path: str, ass_path: str, output_path: str) -> None:
         "-i", temp_path,
         "-vf", f"ass={filter_path}",
         "-c:v", "libx264",
-        "-preset", "fast",
+        "-preset", "ultrafast",
         "-crf", "23",
         "-c:a", "aac",
         "-b:a", "128k",

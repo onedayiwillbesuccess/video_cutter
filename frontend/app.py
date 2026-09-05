@@ -2,7 +2,7 @@ import time
 import requests
 import streamlit as st
 
-API_URL = "http://localhost:8000"
+API_URL = "http://10.10.2.64:8000"
 
 st.set_page_config(page_title="The Clip Snipper", page_icon="✂️", layout="wide")
 

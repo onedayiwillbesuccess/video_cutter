@@ -1,12 +1,18 @@
 import os
+import shutil
+import subprocess
 
 MAX_CHUNK_WORDS = 5
 PLAY_RES_X = 1080
 PLAY_RES_Y = 1920
 
+# Font preference order. libass matches whatever is actually installed on the
+# server via fontconfig, so we avoid hard-failing on a single missing face.
+FONT_FALLBACKS = ["Arial Black", "Liberation Sans Bold", "DejaVu Sans Bold", "Arial"]
+
 STYLE_CONFIG = {
     "Fontname": "Arial Black",
-    "Fontsize": 70,
+    "Fontsize": 85,
     "PrimaryColour": "&H00FFFFFF",
     "SecondaryColour": "&H0000FFFF",
     "OutlineColour": "&H00000000",
@@ -20,18 +26,30 @@ STYLE_CONFIG = {
     "Spacing": 2,
     "Angle": 0,
     "BorderStyle": 1,
-    "Outline": 3,
+    "Outline": 4,
     "Shadow": 0,
     "Alignment": 2,
     "MarginL": 80,
     "MarginR": 250,
-    "MarginV": 250,
+    "MarginV": 450,
     "Encoding": 1,
 }
 
 DEFAULT_FONT = os.environ.get("CAPTION_FONT", "").strip()
 if DEFAULT_FONT:
     STYLE_CONFIG["Fontname"] = DEFAULT_FONT
+elif shutil.which("fc-list"):
+    _installed_fonts = []
+    try:
+        _installed_fonts = subprocess.check_output(
+            ["fc-list", ":", "family"], text=True, stderr=subprocess.DEVNULL
+        ).lower()
+    except Exception:
+        _installed_fonts = []
+    for _candidate in FONT_FALLBACKS:
+        if _candidate.lower() in _installed_fonts:
+            STYLE_CONFIG["Fontname"] = _candidate
+            break
 
 STYLE_FIELDS = (
     "Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "

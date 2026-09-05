@@ -22,11 +22,11 @@ YouTube URL
 **2. Word-Level Timestamps** — faster-whisper now runs with `word_timestamps=True`. Every transcript segment includes per-word `start`/`end`/`word` (saved to `transcript.json`). Used by the caption engine. (`backend/transcriber.py`, `backend/captions.py`)
 
 **3. Karaoke-Style Captions (Pro Reels)** — captions are rendered as ASS subtitles burned via libass using the native `\k` karaoke tag: the active word sweeps to bright yellow precisely as it's spoken. Style is configured for the "Hormozi/MrBeast" look:
-- **Arial Black**, 70px, **ALL CAPS**, **Bold**
-- Thick black outline (3px), no shadow — high contrast on any background
-- Positioned in the bottom **safe zone** (`MarginV=250`, `MarginR=250`) so TikTok/Reels UI buttons never cover the text
+- **Arial Black**, 85px, **ALL CAPS**, **Bold**
+- Thick black outline (4px), no shadow — high contrast on any background
+- Positioned high in the bottom **safe zone** (`MarginV=450`, `MarginR=250`) so TikTok/Reels UI buttons never cover the text
 
-Style is fully tunable via the `STYLE_CONFIG` dict in `backend/captions.py` (set `CAPTION_FONT` env var to switch to Montserrat Black once installed).
+Style is fully tunable via the `STYLE_CONFIG` dict in `backend/captions.py` (set `CAPTION_FONT` env var to switch to Montserrat Black once installed). The backend auto-detects the heaviest available font on the server (Arial Black → Liberation Sans Bold → DejaVu Sans Bold) instead of silently falling back to a thin one.
 
 ## Stack
 
@@ -41,12 +41,22 @@ Style is fully tunable via the `STYLE_CONFIG` dict in `backend/captions.py` (set
 ## Requirements
 
 - Python 3.10+
-- [FFmpeg](https://ffmpeg.org/download.html) installed and on `PATH`
+- [FFmpeg](https://ffmpeg.org/download.html) installed and on `PATH` (with **libass** support for the karaoke subtitles — the standard Ubuntu `ffmpeg` package includes it)
 - [Ollama](https://ollama.com/) installed and running
 - Pull the LLM model once:
   ```bash
   ollama pull llama3.2
   ```
+
+### Install professional fonts (important!)
+
+Ubuntu ships only thin default fonts, so bold "viral" captions (Arial Black) would silently fall back to an ugly thin face. Run the helper once (as root/sudo):
+
+```bash
+sudo bash setup_fonts.sh
+```
+
+This installs `fonts-liberation`, `fonts-roboto`, Microsoft core fonts (Arial Black), plus `ffmpeg`/`libass`, then refreshes the font cache. The backend picks the best installed font automatically — **Arial Black → Liberation Sans Bold → DejaVu Sans Bold → Arial** — or you can force one via the `CAPTION_FONT` env var (e.g., `CAPTION_FONT="Montserrat Black"` after installing that font).
 
 ## Installation
 
@@ -113,7 +123,7 @@ Then open **http://localhost:8501**, paste a YouTube URL, and hit **Snip It!**
 
 - **Transcription speed/accuracy:** change the Whisper model in `transcriber.py` (`base` → `small`, `medium`, `large-v3`). Larger = slower but more accurate.
 - **Face tracking:** tune `sample_step` and the EMA `alpha` in `tracker.py`. Lower `sample_step` = smoother but slower. If faces are frequently missed, lower `min_detection_confidence`.
-- **Caption style:** adjust `STYLE_CONFIG` (font, size, colors, outline, safe-zone margins) in `captions.py`. Set `CAPTION_FONT` env var to use Montserrat Black (install the font on the system). Karaoke sweep duration equals each word's Whisper timing.
+- **Caption style:** adjust `STYLE_CONFIG` (font, size, colors, outline, safe-zone margins) in `captions.py`. Current pro defaults: **Arial Black 85px, ALL CAPS, Bold, Outline 4, MarginV 450** (raised clear of Reels/TikTok buttons), with per-word `\k` karaoke highlight in yellow. Set `CAPTION_FONT` env var to switch fonts. The font must be installed server-side (`sudo bash setup_fonts.sh`).
 - **Resolution / sharpness:** `extractor.py` now downloads the **highest-resolution** format (no 1080p cap) so the 9:16 center window stays sharp after cropping. Toggle the `format` string if you want to bound file size.
 - **AI model / reliability:** `MODEL_NAME` in `brain.py` defaults to `llama3.2:1b`; override via code or environment. `"format": "json"` forces clean output; `"num_predict": 1000` prevents truncation; `"temperature": 0.3` keeps the model focused. If Ollama fails or returns garbage, a 30-second fallback clip is emitted so the app never crashes.
 - **CPU scheduling:** `run_backend.sh` launches the backend at `nice -n 19` so it never starves other workloads on the host. Adjust as needed for your Proxmox / server environment.
@@ -123,7 +133,7 @@ Then open **http://localhost:8501**, paste a YouTube URL, and hit **Snip It!**
 ## Notes
 
 - Clips are rendered at 1080×1920 (9:16), H.264 + AAC.
-- Captions are pro-style karaoke: **Arial Black, 70px, ALL CAPS**, active word swept to **yellow** via the native `\k` tag, thick black outline, positioned in the bottom safe zone (clear of Reels/TikTok buttons).
+- Captions are pro-style karaoke: **Arial Black, 85px, ALL CAPS**, active word swept to **yellow** via the native `\k` tag, thick black outline (4px), safe-zone bottom position (`MarginV=450`, `MarginR=250`, `Alignment=2`).
 - Face tracking gracefully falls back to center-crop if MediaPipe isn't installed or no faces are found.
 - The audio download enables instant transcription while the full video downloads in a background thread (`main.py`). The editing step waits (joins) for the video thread before cutting, so `full_video.mp4` always exists — fixing the earlier bug where the editor looked for a file that was never fetched.
 - Output files land in `outputs/<job_id>/`, including the full transcript JSON (with word timestamps) and per-clip `.ass`/`.srt` files.
