@@ -1,9 +1,73 @@
 import json
+import re
+
 import requests
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3.2"
+MODEL_NAME = "llama3.2:1b"
+
+FALLBACK_CLIPS = [
+    {"start_time": 0.0, "end_time": 30.0, "title": "Default Clip"},
+]
+
+
+def _build_prompt(full_text: str) -> str:
+    return f"""You are a viral video editor for short-form vertical video (TikTok, Reels, Shorts).
+
+Below is a transcript from a YouTube video with timestamps. Analyze it and pick 3-5 high-impact clips.
+Each clip must be under 60 seconds, start with a strong hook, and contain a complete thought.
+
+TRANSCRIPT:
+{full_text}
+
+RETURN ONLY A JSON ARRAY. DO NOT EXPLAIN. NO MARKDOWN. NO EXTRA TEXT.
+Format:
+[
+  {{"start_time": 12.5, "end_time": 45.0, "title": "Clip Title"}},
+  {{"start_time": 50.0, "end_time": 80.0, "title": "Clip Title"}}
+]"""
+
+
+def _parse_json_response(raw_content: str) -> list:
+    raw_content = raw_content.strip()
+
+    try:
+        parsed = json.loads(raw_content)
+        if isinstance(parsed, list):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    json_match = re.search(r"\[.*\]", raw_content, re.DOTALL)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            raise ValueError(f"Could not parse JSON from Ollama:\n{raw_content[:500]}")
+
+    raise ValueError(f"No JSON array found in Ollama response:\n{raw_content[:500]}")
+
+
+def _validate_clips(clips: list) -> list[dict]:
+    validated = []
+    for clip in clips:
+        try:
+            start = float(clip["start_time"])
+            end = float(clip["end_time"])
+            title = str(clip["title"])
+        except (TypeError, KeyError, ValueError):
+            continue
+        if end <= start or end - start > 60:
+            continue
+        validated.append({
+            "start_time": start,
+            "end_time": end,
+            "title": title,
+        })
+    return validated
 
 
 def select_clips(transcript: list[dict]) -> list[dict]:
@@ -11,56 +75,31 @@ def select_clips(transcript: list[dict]) -> list[dict]:
     for seg in transcript:
         full_text += f"[{seg['start']:.1f}s - {seg['end']:.1f}s] {seg['text']}\n"
 
-    prompt = f"""Act as a viral content editor for short-form vertical video (TikTok, Reels, Shorts).
-
-Below is a transcript from a YouTube video with timestamps. Analyze it and identify the 5 best segments to cut into standalone viral clips. Each clip must:
-- Be under 60 seconds
-- Start with a strong "hook" (question, bold statement, surprising fact)
-- Contain a complete thought or story arc
-- Have high emotional or informational impact
-
-TRANSCRIPT:
-{full_text}
-
-Return ONLY a valid JSON array of objects with exactly these keys:
-"start_time" (float, seconds), "end_time" (float, seconds), "title" (string, max 8 words).
-
-Example:
-[
-  {{"start_time": 12.5, "end_time": 45.3, "title": "Why Most People Fail at Dieting"}},
-  ...
-]
-
-No markdown, no explanation. ONLY the JSON array."""
-
     payload = {
         "model": MODEL_NAME,
-        "prompt": prompt,
+        "prompt": _build_prompt(full_text),
         "stream": False,
+        "format": "json",
         "options": {
             "temperature": 0.3,
-            "num_predict": 2048,
+            "num_predict": 1000,
         },
     }
 
-    resp = requests.post(OLLAMA_URL, json=payload, timeout=120)
-    resp.raise_for_status()
+    try:
+        resp = requests.post(OLLAMA_URL, json=payload, timeout=600)
+        resp.raise_for_status()
 
-    raw = resp.json().get("response", "")
+        raw_content = resp.json().get("response", "")
+        clips = _parse_json_response(raw_content)
+        validated = _validate_clips(clips)
 
-    json_start = raw.find("[")
-    json_end = raw.rfind("]") + 1
-    if json_start == -1 or json_end <= 0:
-        raise ValueError(f"Could not parse JSON from Ollama response:\n{raw[:500]}")
+        if not validated:
+            print(f"Ollama returned invalid clips, using fallback. Raw:\n{raw_content[:500]}")
+            return list(FALLBACK_CLIPS)
 
-    clips = json.loads(raw[json_start:json_end])
+        return validated
 
-    validated = []
-    for clip in clips:
-        validated.append({
-            "start_time": float(clip["start_time"]),
-            "end_time": float(clip["end_time"]),
-            "title": str(clip["title"]),
-        })
-
-    return validated
+    except Exception as e:
+        print(f"Ollama Error: {str(e)}")
+        return list(FALLBACK_CLIPS)

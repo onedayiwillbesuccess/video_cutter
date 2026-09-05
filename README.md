@@ -28,7 +28,7 @@ YouTube URL
 - **Backend:** FastAPI + uvicorn
 - **Downloading:** yt-dlp + FFmpeg
 - **Transcription:** faster-whisper (local, `base` model / int8, word timestamps)
-- **AI Selection:** Ollama running llama3.2 locally
+- **AI Selection:** Ollama running llama3.2:1b locally (forced JSON mode via `format: "json"`; robust multi-strategy parsing with a safe fallback)
 - **Face Tracking:** MediaPipe
 - **Editing:** MoviePy + FFmpeg + libass
 - **Frontend:** Streamlit
@@ -61,7 +61,8 @@ pip install -r requirements-streamlit.txt
 Terminal 1 — backend:
 ```bash
 ./run_backend.sh
-# or: uvicorn main:app --host 0.0.0.0 --port 8000 (in backend/)
+# or manually:
+export PYTHONPATH=$(pwd)/backend && nice -n 19 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Terminal 2 — frontend:
@@ -108,8 +109,10 @@ Then open **http://localhost:8501**, paste a YouTube URL, and hit **Snip It!**
 - **Transcription speed/accuracy:** change the Whisper model in `transcriber.py` (`base` → `small`, `medium`, `large-v3`). Larger = slower but more accurate.
 - **Face tracking:** tune `sample_step` and the EMA `alpha` in `tracker.py`. Lower `sample_step` = smoother but slower. If faces are frequently missed, lower `min_detection_confidence`.
 - **Caption style:** adjust `MAX_CHUNK_WORDS`, `HIGHLIGHT_COLOR`, font size, and safe-zone margins in `captions.py`. Set `CAPTION_FONT` env var to use Montserrat (install the font on the system).
+- **AI model / reliability:** `MODEL_NAME` in `brain.py` defaults to `llama3.2:1b`; override via code or environment. `"format": "json"` forces clean output; `"num_predict": 1000` prevents truncation; `"temperature": 0.3` keeps the model focused. If Ollama fails or returns garbage, a 30-second fallback clip is emitted so the app never crashes.
+- **CPU scheduling:** `run_backend.sh` launches the backend at `nice -n 19` so it never starves other workloads on the host. Adjust as needed for your Proxmox / server environment.
 - **Mapping/verification:** if Ollama returns clip boundaries that drift slightly, context interval in `brain.py` prompt will keep it aligned since timestamps are embedded per line.
-- **Clip count:** change "5 segments" in the `brain.py` prompt.
+- **Clip count:** change "3-5" in the `brain.py` prompt.
 
 ## Notes
 
